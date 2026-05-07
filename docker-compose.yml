@@ -36,10 +36,7 @@ services:
 
   # --- SSO Service (Auth & Session) ---
   sso:
-    build:
-      context: .
-      args:
-        - SERVICE_NAME=sso
+    image: ghcr.io/bagusyanuar/go-simrs-sso:latest
     container_name: sso-app
     restart: unless-stopped
     logging: *default-logging
@@ -56,10 +53,7 @@ services:
 
   # --- SIMRS Backend API ---
   api:
-    build:
-      context: .
-      args:
-        - SERVICE_NAME=api
+    image: ghcr.io/bagusyanuar/go-simrs-api:latest
     container_name: simrs-api
     restart: unless-stopped
     logging: *default-logging

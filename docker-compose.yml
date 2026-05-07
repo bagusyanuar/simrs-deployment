@@ -1,0 +1,95 @@
+# Docker Compose for SIMRS
+
+# Set default logging for all services
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # --- Shared Database ---
+  db:
+    image: postgres:15-alpine
+    container_name: simrs-db
+    restart: unless-stopped
+    logging: *default-logging
+    env_file:
+      - ./environment/backend/.env
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-wolfmother}
+      POSTGRES_DB: ${DB_NAME:-db_gen_simrs}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-db_gen_simrs}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- SSO Service (Auth & Session) ---
+  sso:
+    build:
+      context: .
+      args:
+        - SERVICE_NAME=sso
+    container_name: sso-app
+    restart: unless-stopped
+    logging: *default-logging
+    env_file:
+      - ./environment/backend/.env
+    environment:
+      - APP_NAME=simrs-sso
+      - APP_ENV=production
+      - APP_PORT=8081
+      - DB_HOST=db
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # --- SIMRS Backend API ---
+  api:
+    build:
+      context: .
+      args:
+        - SERVICE_NAME=api
+    container_name: simrs-api
+    restart: unless-stopped
+    logging: *default-logging
+    env_file:
+      - ./environment/backend/.env
+    environment:
+      - APP_NAME=simrs-api
+      - APP_ENV=production
+      - APP_PORT=8000
+      - DB_HOST=db
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # --- Nginx Reverse Proxy ---
+  nginx:
+    image: nginx:alpine
+    container_name: simrs-nginx
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/server.pem:/etc/nginx/ssl/server.pem:ro
+      - ./nginx/server.key:/etc/nginx/ssl/server.key:ro
+    depends_on:
+      - sso
+      - api
+
+volumes:
+  db_data:
